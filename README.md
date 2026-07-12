@@ -3,7 +3,7 @@
 An interactive, single-file OSINT (Open Source Intelligence) Command Center designed for security analysts to monitor global internet threat levels in real-time. Built as a practical portfolio project transitioning into Year 2 Cyber Security at Leeds Beckett University.
 
 ## Live Demo
-[CLICK HERE TO VIEW THE LIVE DASHBOARD](PASTE_YOUR_GITHUB_PAGES_LINK_HERE)
+[CLICK HERE TO VIEW THE LIVE DASHBOARD](https://zaidsaleh452.github.io/sentinel-osint/)
 
 ## Features
 * **Live SANS InfoCon Integration:** Fetches real-world internet threat levels (Green/Yellow/Red) directly from the SANS Internet Storm Center API.
