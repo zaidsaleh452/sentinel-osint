@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SENTINEL // OSINT Threat Intelligence Dashboard</title>
+
+<!-- Tailwind via CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Fonts: JetBrains Mono for data/terminal feel, Inter for body copy -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          void: '#05070a',
+          panel: '#0d131a',
+          panel2: '#111a23',
+          line: '#1e2a36',
+          slate: {
+            850: '#151e28'
+          },
+          neon: {
+            green: '#2bffa3',
+            blue: '#38bdf8',
+            amber: '#fbbf24',
+            red: '#ff4d6d'
+          }
+        },
+        fontFamily: {
+          mono: ['"JetBrains Mono"', 'monospace'],
+          sans: ['Inter', 'sans-serif']
+        },
+        boxShadow: {
+          glowGreen: '0 0 20px -2px rgba(43,255,163,0.35)',
+          glowBlue: '0 0 20px -2px rgba(56,189,248,0.35)',
+          glowRed: '0 0 20px -2px rgba(255,77,109,0.35)',
+          glowAmber: '0 0 20px -2px rgba(251,191,36,0.35)'
+        }
+      }
+    }
+  }
+</script>
+
+<style>
+  body {
+    background-color: #05070a;
+    background-image:
+      linear-gradient(rgba(43,255,163,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(43,255,163,0.035) 1px, transparent 1px);
+    background-size: 42px 42px;
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #05070a; }
+  ::-webkit-scrollbar-thumb { background: #1e2a36; border-radius: 0; }
+  ::-webkit-scrollbar-thumb:hover { background: #2bffa3; }
+
+  @keyframes scanline {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .scanline-bar {
+    animation: scanline 3.2s linear infinite;
+  }
+
+  @keyframes blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+  .cursor-blink { animation: blink 1s step-end infinite; }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+  .pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
+
+  @keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .ticker-track {
+    animation: ticker 28s linear infinite;
+    white-space: nowrap;
+  }
+
+  .clip-corner {
+    clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scanline-bar, .cursor-blink, .pulse-dot, .ticker-track { animation: none !important; }
+  }
+</style>
+</head>
+
+<body class="min-h-screen text-slate-200 font-sans antialiased">
+
+  <!-- ============ TOP STATUS TICKER ============ -->
+  <div class="w-full bg-black border-b border-line overflow-hidden">
+    <div class="flex items-center">
+      <span class="shrink-0 bg-neon-green/10 text-neon-green text-[10px] font-mono font-bold tracking-widest px-3 py-1.5 border-r border-line">
+        SYS.LOG
+      </span>
+      <div class="flex-1 overflow-hidden py-1.5">
+        <div class="ticker-track inline-flex gap-10 text-[11px] font-mono text-slate-500">
+          <span id="tickerContent">LOADING SYSTEM TELEMETRY...</span>
+          <span id="tickerContentDupe">LOADING SYSTEM TELEMETRY...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ HEADER ============ -->
+  <header class="relative border-b border-line bg-panel/60 overflow-hidden">
+    <div class="absolute top-0 left-0 h-[2px] w-1/3 bg-gradient-to-r from-transparent via-neon-green to-transparent scanline-bar"></div>
+    <div class="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div class="flex items-center gap-4">
+        <div class="w-11 h-11 border border-neon-green/40 flex items-center justify-center clip-corner bg-neon-green/5">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-neon-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M12 2 4 5v6c0 5 3.4 8.7 8 11 4.6-2.3 8-6 8-11V5l-8-3Z"/>
+            <path d="M9 12.5 11.2 15 15.5 9.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="font-mono text-xl md:text-2xl font-bold tracking-widest text-white">
+            SENTINEL<span class="text-neon-green">_</span>OSINT
+          </h1>
+          <p class="text-[11px] font-mono text-slate-500 tracking-wide">THREAT INTELLIGENCE COMMAND CENTER v1.0</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-6 font-mono text-xs">
+        <div class="flex items-center gap-2 text-slate-400">
+          <span class="w-2 h-2 rounded-full bg-neon-green pulse-dot"></span>
+          OPERATOR SESSION ACTIVE
+        </div>
+        <div id="clock" class="text-slate-300 tabular-nums border border-line px-3 py-1.5 bg-black/40">--:--:--</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ MAIN ============ -->
+  <main class="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- ===== THREAT LEVEL CARD ===== -->
+    <section id="infoconCard" class="lg:col-span-1 bg-panel border border-line clip-corner relative overflow-hidden flex flex-col">
+      <div class="px-5 py-3 border-b border-line flex items-center justify-between bg-black/30">
+        <h2 class="font-mono text-[11px] tracking-widest text-slate-400">// CURRENT THREAT LEVEL</h2>
+        <span id="infoconBadge" class="text-[10px] font-mono px-2 py-0.5 border border-line text-slate-500">SYNCING</span>
+      </div>
+
+      <div class="flex-1 flex flex-col items-center justify-center px-6 py-10 gap-5 text-center">
+        <div id="infoconRing" class="w-32 h-32 rounded-full border-4 border-line flex items-center justify-center transition-all duration-500">
+          <div id="infoconDot" class="w-20 h-20 rounded-full bg-slate-700 transition-all duration-500"></div>
+        </div>
+        <div>
+          <p id="infoconStatus" class="font-mono text-2xl font-extrabold tracking-widest text-slate-400">SYNCING</p>
+          <p class="text-[11px] font-mono text-slate-600 mt-1">SANS ISC INFOCON INDEX</p>
+        </div>
+        <p id="infoconDesc" class="text-sm text-slate-400 leading-relaxed max-w-xs">
+          Establishing connection to Internet Storm Center telemetry feed...
+        </p>
+      </div>
+
+      <div class="px-5 py-3 border-t border-line bg-black/30 flex items-center justify-between">
+        <span class="text-[10px] font-mono text-slate-600">SRC: isc.sans.edu/api/infocon</span>
+        <button id="refreshInfocon" class="text-[10px] font-mono text-neon-blue hover:text-white transition-colors">↻ REFRESH</button>
+      </div>
+    </section>
+
+    <!-- ===== RIGHT COLUMN ===== -->
+    <div class="lg:col-span-2 flex flex-col gap-6">
+
+      <!-- ===== THREAT ANALYZER ===== -->
+      <section class="bg-panel border border-line clip-corner">
+        <div class="px-5 py-3 border-b border-line flex items-center justify-between bg-black/30">
+          <h2 class="font-mono text-[11px] tracking-widest text-slate-400">// THREAT ANALYZER</h2>
+          <span class="text-[10px] font-mono px-2 py-0.5 border border-neon-blue/30 text-neon-blue">SIMULATED</span>
+        </div>
+
+        <div class="p-5">
+          <p class="text-xs text-slate-500 mb-3 font-mono">
+            Enter an IP address, domain, or file hash (MD5 / SHA1 / SHA256) to run a simulated lookup.
+          </p>
+          <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1 flex items-center bg-black/50 border border-line focus-within:border-neon-green transition-colors px-3">
+              <span class="text-neon-green font-mono mr-2">&gt;</span>
+              <input
+                id="analyzerInput"
+                type="text"
+                placeholder="e.g. 185.220.101.4  /  malicious-domain.io  /  44d88612fea8a8f36de82e1278abb02f"
+                class="w-full bg-transparent py-3 font-mono text-sm text-slate-100 placeholder-slate-600 outline-none"
+              />
+            </div>
+            <button
+              id="analyzeBtn"
+              class="shrink-0 font-mono text-sm font-bold tracking-widest px-6 py-3 bg-neon-green/10 border border-neon-green text-neon-green hover:bg-neon-green hover:text-black transition-all shadow-glowGreen"
+            >
+              ANALYZE
+            </button>
+          </div>
+          <p id="analyzerError" class="hidden text-neon-red text-xs font-mono mt-2">// ERROR: enter a value before running analysis.</p>
+
+          <!-- Results -->
+          <div id="analyzerResults" class="hidden mt-6 border-t border-line pt-5">
+            <div class="flex items-center justify-between mb-4">
+              <p class="font-mono text-xs text-slate-500">TARGET: <span id="resTarget" class="text-slate-200"></span></p>
+              <p class="font-mono text-xs text-slate-500">TYPE: <span id="resType" class="text-neon-blue"></span></p>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+              <div class="bg-black/40 border border-line p-3">
+                <p class="text-[10px] font-mono text-slate-500 mb-1">RISK SCORE</p>
+                <p id="resRisk" class="font-mono text-2xl font-bold">--</p>
+              </div>
+              <div class="bg-black/40 border border-line p-3">
+                <p class="text-[10px] font-mono text-slate-500 mb-1">MALICIOUS FLAGS</p>
+                <p id="resFlags" class="font-mono text-2xl font-bold text-slate-100">--</p>
+              </div>
+              <div class="bg-black/40 border border-line p-3">
+                <p class="text-[10px] font-mono text-slate-500 mb-1">COUNTRY</p>
+                <p id="resCountry" class="font-mono text-lg font-bold text-slate-100">--</p>
+              </div>
+              <div class="bg-black/40 border border-line p-3">
+                <p class="text-[10px] font-mono text-slate-500 mb-1">VERDICT</p>
+                <p id="resVerdict" class="font-mono text-lg font-bold">--</p>
+              </div>
+            </div>
+
+            <div class="bg-black/40 border border-line p-4 font-mono text-xs text-slate-400 space-y-1.5">
+              <p>ASN: <span id="resAsn" class="text-slate-200"></span></p>
+              <p>Reporting Sources: <span id="resSources" class="text-slate-200"></span></p>
+              <p>First Seen: <span id="resFirstSeen" class="text-slate-200"></span></p>
+              <p>Tags: <span id="resTags" class="text-slate-200"></span></p>
+            </div>
+
+            <p class="text-[10px] font-mono text-slate-600 mt-3">
+              * All metrics above are randomly generated for demonstration purposes and do not reflect a real threat feed lookup.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== LINKEDIN SUMMARY ===== -->
+      <section class="bg-panel border border-line clip-corner">
+        <div class="px-5 py-3 border-b border-line flex items-center justify-between bg-black/30">
+          <h2 class="font-mono text-[11px] tracking-widest text-slate-400">// PROJECT SUMMARY (LINKEDIN-READY)</h2>
+          <button id="copySummary" class="text-[10px] font-mono px-2 py-0.5 border border-neon-blue/30 text-neon-blue hover:bg-neon-blue hover:text-black transition-colors">
+            COPY
+          </button>
+        </div>
+        <div class="p-5">
+          <p id="summaryText" class="text-sm text-slate-300 leading-relaxed">
+            Built <span class="text-neon-green font-semibold">Sentinel OSINT</span>, a self-contained, single-file
+            Threat Intelligence Dashboard, to strengthen my hands-on cybersecurity and front-end development skills.
+            The project integrates a <span class="text-slate-100">live REST API</span> (SANS Internet Storm Center
+            InfoCon feed) using the native JavaScript <span class="text-slate-100">Fetch API</span>, with asynchronous
+            <span class="text-slate-100">async/await</span> logic and graceful error handling for offline/CORS-restricted
+            environments. It parses and renders <span class="text-slate-100">JSON</span> data dynamically, manipulates
+            the DOM in real time, and includes an interactive IP/domain/hash analyzer that simulates threat-scoring
+            logic. The interface is a fully <span class="text-slate-100">responsive UI</span> built with
+            <span class="text-slate-100">Tailwind CSS</span>, featuring a custom dark "command center" design system,
+            CSS animations, and accessibility considerations (reduced-motion support, semantic markup). No frameworks,
+            build tools, or backend required — just HTML, CSS, and vanilla JavaScript in a single file.
+          </p>
+          <div class="flex flex-wrap gap-2 mt-4">
+            <span class="text-[10px] font-mono px-2 py-1 bg-black/40 border border-line text-slate-400">JavaScript (ES6+)</span>
+            <span class="text-[10px] font-mono px-2 py-1 bg-black/40 border border-line text-slate-400">Fetch API / REST</span>
+            <span class="text-[10px] font-mono px-2 py-1 bg-black/40 border border-line text-slate-400">JSON Parsing</span>
+            <span class="text-[10px] font-mono px-2 py-1 bg-black/40 border border-line text-slate-400">Async/Await</span>
+            <span class="text-[10px] font-mono px-2 py-1 bg-black/40 border border-line text-slate-400">DOM Manipulation</span>
+            <span class="text-[10px] font-mono px-2 py-1 bg-black/40 border border-line text-slate-400">Tailwind CSS</span>
+            <span class="text-[10px] font-mono px-2 py-1 bg-black/40 border border-line text-slate-400">Responsive Design</span>
+            <span class="text-[10px] font-mono px-2 py-1 bg-black/40 border border-line text-slate-400">Error Handling</span>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-6 pb-8">
+    <div class="border-t border-line pt-4 flex flex-col md:flex-row items-center justify-between gap-2 text-[10px] font-mono text-slate-600">
+      <p>SENTINEL_OSINT // BUILT FOR EDUCATIONAL &amp; PORTFOLIO USE ONLY</p>
+      <p>ALL LOOKUP DATA IN THE ANALYZER PANEL IS SIMULATED</p>
+    </div>
+  </footer>
+
+<script>
+  // ============================================================
+  // CLOCK
+  // ============================================================
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent = now.toLocaleTimeString('en-GB', { hour12: false });
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // ============================================================
+  // TICKER
+  // ============================================================
+  const tickerMessages = [
+    'INFOCON FEED: SANS ISC',
+    'ANALYZER MODULE: SIMULATED THREAT SCORING ONLINE',
+    'CONNECTION: HTTPS / TLS 1.3',
+    'DASHBOARD STATUS: OPERATIONAL',
+    'REMINDER: ANALYZER RESULTS ARE MOCK DATA FOR DEMO PURPOSES'
+  ];
+  const tickerStr = tickerMessages.join('   //   ') + '   //   ';
+  document.getElementById('tickerContent').textContent = tickerStr;
+  document.getElementById('tickerContentDupe').textContent = tickerStr;
+
+  // ============================================================
+  // INFOCON (SANS ISC) LIVE FEED
+  // ============================================================
+  const INFOCON_URL = 'https://isc.sans.edu/api/infocon?json';
+
+  const infoconMeta = {
+    green: {
+      label: 'GREEN',
+      desc: 'No unusual activity. Internet conditions are normal — routine patching and standard vigilance are sufficient.',
+      dot: 'bg-neon-green',
+      ring: 'border-neon-green',
+      text: 'text-neon-green',
+      glow: 'shadow-glowGreen'
+    },
+    yellow: {
+      label: 'YELLOW',
+      desc: 'Increased probability of a significant threat. Recommended to tighten monitoring and expedite patch cycles.',
+      dot: 'bg-neon-amber',
+      ring: 'border-neon-amber',
+      text: 'text-neon-amber',
+      glow: 'shadow-glowAmber'
+    },
+    orange: {
+      label: 'ORANGE',
+      desc: 'A significant new threat is actively exploiting vulnerabilities. Expedite response and remediation actions.',
+      dot: 'bg-neon-amber',
+      ring: 'border-neon-amber',
+      text: 'text-neon-amber',
+      glow: 'shadow-glowAmber'
+    },
+    red: {
+      label: 'RED',
+      desc: 'Active, widespread exploitation is severely impacting Internet infrastructure. All available resources should focus on response.',
+      dot: 'bg-neon-red',
+      ring: 'border-neon-red',
+      text: 'text-neon-red',
+      glow: 'shadow-glowRed'
+    }
+  };
+
+  function applyInfocon(rawStatus, isLive) {
+    const status = (rawStatus || 'green').toLowerCase().trim();
+    const meta = infoconMeta[status] || infoconMeta.green;
+
+    const ring = document.getElementById('infoconRing');
+    const dot = document.getElementById('infoconDot');
+    const statusEl = document.getElementById('infoconStatus');
+    const descEl = document.getElementById('infoconDesc');
+    const badge = document.getElementById('infoconBadge');
+
+    ring.className = `w-32 h-32 rounded-full border-4 ${meta.ring} flex items-center justify-center transition-all duration-500 ${meta.glow}`;
+    dot.className = `w-20 h-20 rounded-full ${meta.dot} transition-all duration-500`;
+    statusEl.textContent = meta.label;
+    statusEl.className = `font-mono text-2xl font-extrabold tracking-widest ${meta.text}`;
+    descEl.textContent = meta.desc;
+
+    if (isLive) {
+      badge.textContent = 'LIVE';
+      badge.className = 'text-[10px] font-mono px-2 py-0.5 border border-neon-green/40 text-neon-green';
+    } else {
+      badge.textContent = 'DEMO DATA';
+      badge.className = 'text-[10px] font-mono px-2 py-0.5 border border-neon-amber/40 text-neon-amber';
+    }
+  }
+
+  async function fetchInfocon() {
+    const badge = document.getElementById('infoconBadge');
+    badge.textContent = 'SYNCING';
+    badge.className = 'text-[10px] font-mono px-2 py-0.5 border border-line text-slate-500';
+
+    try {
+      const res = await fetch(INFOCON_URL, { cache: 'no-store' });
+      if (!res.ok) throw new Error('Network response was not OK (' + res.status + ')');
+      const data = await res.json();
+
+      // The SANS ISC API has returned slightly different shapes over time
+      // (a single object, or an array of daily records). Handle both.
+      let record = Array.isArray(data) ? data[0] : data;
+      const status = record && (record.status || record.STATUS || record.infocon);
+
+      if (!status) throw new Error('Unexpected response shape from InfoCon API');
+      applyInfocon(status, true);
+    } catch (err) {
+      // Common causes here: the browser blocking a cross-origin request
+      // (isc.sans.edu does not send permissive CORS headers to all origins),
+      // the page being opened via file:// instead of http(s)://, or being offline.
+      console.warn('InfoCon live fetch failed, falling back to demo data:', err);
+      applyInfocon('green', false);
+    }
+  }
+
+  document.getElementById('refreshInfocon').addEventListener('click', fetchInfocon);
+  fetchInfocon();
+
+  // ============================================================
+  // THREAT ANALYZER (SIMULATED)
+  // ============================================================
+  function classifyInput(value) {
+    const v = value.trim();
+    if (/^[a-fA-F0-9]{32}$/.test(v) || /^[a-fA-F0-9]{40}$/.test(v) || /^[a-fA-F0-9]{64}$/.test(v)) {
+      return 'FILE HASH';
+    }
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(v)) {
+      return 'IP ADDRESS';
+    }
+    if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(v)) {
+      return 'DOMAIN';
+    }
+    return 'UNKNOWN';
+  }
+
+  // Simple deterministic hash so the same input always yields the same
+  // "analysis" -- makes the simulation feel consistent rather than random noise.
+  function hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  }
+
+  const countries = ['United States', 'Netherlands', 'Russia', 'China', 'Germany', 'Brazil', 'Romania', 'Vietnam', 'Ukraine', 'Singapore', 'Iran', 'India'];
+  const tagPool = ['botnet', 'phishing', 'c2-infrastructure', 'scanner', 'brute-force', 'tor-exit-node', 'spam-source', 'malware-dropper', 'credential-harvester', 'ransomware-affiliate'];
+  const sourcesPool = ['AbuseIPDB', 'VirusTotal', 'AlienVault OTX', 'Shodan', 'GreyNoise', 'SANS DShield'];
+
+  function runAnalysis(rawValue) {
+    const value = rawValue.trim();
+    const type = classifyInput(value);
+    const seed = hashString(value.toLowerCase());
+
+    const risk = seed % 101; // 0-100
+    const flagCount = seed % 9; // 0-8
+    const country = countries[seed % countries.length];
+    const asn = 'AS' + (10000 + (seed % 55000));
+
+    const numSources = 1 + (seed % sourcesPool.length);
+    const shuffledSources = [...sourcesPool].sort((a, b) => ((seed + a.length) % 7) - ((seed + b.length) % 7)).slice(0, numSources);
+
+    const numTags = flagCount === 0 ? 1 : 1 + (seed % 3);
+    const shuffledTags = [...tagPool].sort((a, b) => ((seed + a.length) % 5) - ((seed + b.length) % 5)).slice(0, numTags);
+
+    const daysAgo = 1 + (seed % 720);
+    const firstSeenDate = new Date(Date.now() - daysAgo * 86400000);
+
+    let verdict, verdictColor;
+    if (risk >= 75) {
+      verdict = 'MALICIOUS'; verdictColor = 'text-neon-red';
+    } else if (risk >= 40) {
+      verdict = 'SUSPICIOUS'; verdictColor = 'text-neon-amber';
+    } else {
+      verdict = 'CLEAN'; verdictColor = 'text-neon-green';
+    }
+
+    document.getElementById('resTarget').textContent = value;
+    document.getElementById('resType').textContent = type;
+    document.getElementById('resRisk').textContent = risk + ' / 100';
+    document.getElementById('resRisk').className = `font-mono text-2xl font-bold ${verdictColor}`;
+    document.getElementById('resFlags').textContent = flagCount;
+    document.getElementById('resCountry').textContent = type === 'FILE HASH' ? 'N/A' : country;
+    document.getElementById('resVerdict').textContent = verdict;
+    document.getElementById('resVerdict').className = `font-mono text-lg font-bold ${verdictColor}`;
+    document.getElementById('resAsn').textContent = type === 'FILE HASH' ? 'N/A' : asn;
+    document.getElementById('resSources').textContent = shuffledSources.join(', ');
+    document.getElementById('resFirstSeen').textContent = firstSeenDate.toISOString().split('T')[0];
+    document.getElementById('resTags').textContent = flagCount === 0 ? 'none' : shuffledTags.join(', ');
+
+    document.getElementById('analyzerResults').classList.remove('hidden');
+  }
+
+  document.getElementById('analyzeBtn').addEventListener('click', () => {
+    const input = document.getElementById('analyzerInput');
+    const errorEl = document.getElementById('analyzerError');
+    if (!input.value.trim()) {
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    errorEl.classList.add('hidden');
+    runAnalysis(input.value);
+  });
+
+  document.getElementById('analyzerInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('analyzeBtn').click();
+  });
+
+  // ============================================================
+  // COPY LINKEDIN SUMMARY
+  // ============================================================
+  document.getElementById('copySummary').addEventListener('click', async () => {
+    const btn = document.getElementById('copySummary');
+    const text = document.getElementById('summaryText').innerText;
+    try {
+      await navigator.clipboard.writeText(text);
+      const original = btn.textContent;
+      btn.textContent = 'COPIED ✓';
+      setTimeout(() => { btn.textContent = original; }, 1800);
+    } catch (err) {
+      console.warn('Clipboard copy failed:', err);
+      btn.textContent = 'COPY FAILED';
+      setTimeout(() => { btn.textContent = 'COPY'; }, 1800);
+    }
+  });
+</script>
+
+</body>
+</html>
